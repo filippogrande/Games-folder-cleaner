@@ -68,7 +68,7 @@ def flatten_folder(folder):
         logging.info(f'Rimossa cartella annidata: {candidate}')
 
 def log_folder_action(folder, action, result):
-    log_file = 'folders_log.csv'
+    log_file = os.path.join(FOLDER_WATCHED, 'folders_log.csv')
     file_exists = os.path.isfile(log_file)
     with open(log_file, 'a', newline='') as csvfile:
         writer = csv.writer(csvfile)
@@ -77,7 +77,7 @@ def log_folder_action(folder, action, result):
         writer.writerow([datetime.now().isoformat(), folder, action, result])
 
 def is_folder_already_processed(folder):
-    log_file = 'folders_log.csv'
+    log_file = os.path.join(FOLDER_WATCHED, 'folders_log.csv')
     if not os.path.isfile(log_file):
         return False
     with open(log_file, 'r', newline='') as csvfile:
