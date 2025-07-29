@@ -4,8 +4,31 @@ import shutil
 import time
 import logging
 import requests
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+
+
+import csv
+from datetime import datetime
+
+def wait_for_stable_folder(folder, stable_seconds=20, check_interval=2):
+    """Attende che la dimensione della cartella non cambi per stable_seconds."""
+    last_size = -1
+    stable_time = 0
+    while stable_time < stable_seconds:
+        total_size = 0
+        for dirpath, dirnames, filenames in os.walk(folder):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if os.path.isfile(fp):
+                    try:
+                        total_size += os.path.getsize(fp)
+                    except Exception:
+                        pass
+        if total_size == last_size:
+            stable_time += check_interval
+        else:
+            stable_time = 0
+            last_size = total_size
+        time.sleep(check_interval)
 
 
 # Configurazione
@@ -44,6 +67,26 @@ def flatten_folder(folder):
         shutil.rmtree(candidate)
         logging.info(f'Rimossa cartella annidata: {candidate}')
 
+def log_folder_action(folder, action, result):
+    log_file = 'folders_log.csv'
+    file_exists = os.path.isfile(log_file)
+    with open(log_file, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        if not file_exists:
+            writer.writerow(['timestamp', 'folder', 'action', 'result'])
+        writer.writerow([datetime.now().isoformat(), folder, action, result])
+
+def is_folder_already_processed(folder):
+    log_file = 'folders_log.csv'
+    if not os.path.isfile(log_file):
+        return False
+    with open(log_file, 'r', newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            if row['folder'] == folder:
+                return True
+    return False
+
 def clean_game_folder(folder):
     if is_renpy_game(folder):
         save_path = os.path.join(folder, 'game', 'saves')
@@ -55,6 +98,7 @@ def clean_game_folder(folder):
         game_type = 'RPGM'
     else:
         send_telegram_message(f'❌ Tipo di gioco non riconosciuto in {folder}')
+        log_folder_action(folder, 'clean', 'Tipo di gioco non riconosciuto')
         return
     # Elimina tutto tranne le cartelle di salvataggio
     for root, dirs, files in os.walk(folder):
@@ -75,28 +119,34 @@ def clean_game_folder(folder):
                 except Exception as e:
                     logging.error(f'Errore eliminazione {file_path}: {e}')
     send_telegram_message(f'✅ Pulizia completata per {game_type} in {folder}')
+    log_folder_action(folder, 'clean', f'Pulizia completata per {game_type}')
 
-class GameFolderHandler(FileSystemEventHandler):
-    def on_created(self, event):
-        if event.is_directory:
-            time.sleep(2)  # Attendi che la copia sia finita
-            folder = event.src_path
+
+def scan_and_process_folders():
+    send_telegram_message(f'🔄 Inizio scan cartelle in {FOLDER_WATCHED}')
+    if not os.path.isdir(FOLDER_WATCHED):
+        logging.warning(f"La cartella da monitorare non esiste: {FOLDER_WATCHED}")
+        return
+    nuove_cartelle = []
+    for entry in os.listdir(FOLDER_WATCHED):
+        folder = os.path.join(FOLDER_WATCHED, entry)
+        if os.path.isdir(folder) and not is_folder_already_processed(folder):
+            logging.info(f"Nuova cartella trovata: {folder}")
+            wait_for_stable_folder(folder)
             flatten_folder(folder)
             clean_game_folder(folder)
+            nuove_cartelle.append(folder)
+    send_telegram_message(f'✅ Fine ciclo pulizia. Cartelle lavorate: {len(nuove_cartelle)}')
 
 def main():
-    observer = Observer()
-    event_handler = GameFolderHandler()
-    observer.schedule(event_handler, FOLDER_WATCHED, recursive=False)
-    observer.start()
     logging.info(f'In ascolto su {FOLDER_WATCHED}...')
     send_telegram_message(f'🚀 Game Folder Cleaner avviato e in ascolto su {FOLDER_WATCHED}')
     try:
         while True:
+            scan_and_process_folders()
             time.sleep(CHECK_INTERVAL)
     except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        logging.info('Interrotto da tastiera.')
 
 if __name__ == '__main__':
     main()
