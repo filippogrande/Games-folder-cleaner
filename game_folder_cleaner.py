@@ -90,6 +90,7 @@ def main():
     observer.schedule(event_handler, FOLDER_WATCHED, recursive=False)
     observer.start()
     logging.info(f'In ascolto su {FOLDER_WATCHED}...')
+    send_telegram_message(f'🚀 Game Folder Cleaner avviato e in ascolto su {FOLDER_WATCHED}')
     try:
         while True:
             time.sleep(CHECK_INTERVAL)
