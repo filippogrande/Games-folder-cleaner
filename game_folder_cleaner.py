@@ -67,14 +67,47 @@ def flatten_folder(folder):
         shutil.rmtree(candidate)
         logging.info(f'Rimossa cartella annidata: {candidate}')
 
-def log_folder_action(folder, action, result):
+def log_folder_action(folder, action, result, space_saved=None):
     log_file = os.path.join(FOLDER_WATCHED, 'folders_log.csv')
     file_exists = os.path.isfile(log_file)
     with open(log_file, 'a', newline='') as csvfile:
         writer = csv.writer(csvfile)
         if not file_exists:
-            writer.writerow(['timestamp', 'folder', 'action', 'result'])
-        writer.writerow([datetime.now().isoformat(), folder, action, result])
+            writer.writerow(['timestamp', 'folder', 'action', 'result', 'space_saved_MB'])
+        writer.writerow([
+            datetime.now().isoformat(),
+            folder,
+            action,
+            result,
+            f"{space_saved:.2f}" if space_saved is not None else ''
+        ])
+
+def get_total_space_saved():
+    log_file = os.path.join(FOLDER_WATCHED, 'folders_log.csv')
+    total = 0.0
+    if not os.path.isfile(log_file):
+        return 0.0
+    with open(log_file, 'r', newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            try:
+                val = float(row.get('space_saved_MB', '0') or 0)
+                total += val
+            except Exception:
+                pass
+    return total
+
+def get_folder_size(folder):
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(folder):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            if os.path.isfile(fp):
+                try:
+                    total_size += os.path.getsize(fp)
+                except Exception:
+                    pass
+    return total_size
 
 def is_folder_already_processed(folder):
     log_file = os.path.join(FOLDER_WATCHED, 'folders_log.csv')
@@ -100,6 +133,8 @@ def clean_game_folder(folder):
         send_telegram_message(f'❌ Tipo di gioco non riconosciuto in {folder}')
         log_folder_action(folder, 'clean', 'Tipo di gioco non riconosciuto')
         return
+    # Calcola dimensione prima
+    size_before = get_folder_size(folder)
     # Elimina tutto tranne le cartelle di salvataggio
     for root, dirs, files in os.walk(folder):
         for d in dirs:
@@ -118,8 +153,16 @@ def clean_game_folder(folder):
                     logging.info(f'Eliminato file: {file_path}')
                 except Exception as e:
                     logging.error(f'Errore eliminazione {file_path}: {e}')
-    send_telegram_message(f'✅ Pulizia completata per {game_type} in {folder}')
-    log_folder_action(folder, 'clean', f'Pulizia completata per {game_type}')
+    # Calcola dimensione dopo
+    size_after = get_folder_size(folder)
+    space_saved = (size_before - size_after) / (1024 * 1024)  # MB
+    total_saved = get_total_space_saved() + space_saved
+    send_telegram_message(
+        f'✅ Pulizia completata per {game_type} in {folder}.\n'
+        f'Spazio risparmiato in questa cartella: {space_saved:.2f} MB\n'
+        f'Totale risparmiato: {total_saved:.2f} MB'
+    )
+    log_folder_action(folder, 'clean', f'Pulizia completata per {game_type}', space_saved)
 
 
 def scan_and_process_folders():
@@ -136,7 +179,11 @@ def scan_and_process_folders():
             flatten_folder(folder)
             clean_game_folder(folder)
             nuove_cartelle.append(folder)
-    send_telegram_message(f'✅ Fine ciclo pulizia. Cartelle lavorate: {len(nuove_cartelle)}')
+    total_saved = get_total_space_saved()
+    send_telegram_message(
+        f'✅ Fine ciclo pulizia. Cartelle lavorate: {len(nuove_cartelle)}\n'
+        f'Totale spazio risparmiato: {total_saved:.2f} MB'
+    )
 
 def main():
     logging.info(f'In ascolto su {FOLDER_WATCHED}...')
