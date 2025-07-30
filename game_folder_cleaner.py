@@ -76,22 +76,38 @@ def send_telegram_message(message):
         logging.error(f'Errore invio Telegram: {e}')
 
 def is_renpy_game(folder):
-    return os.path.isdir(os.path.join(folder, 'game', 'saves'))
+    # Riconosce sia /game/saves che /QUALCOSA/game/saves (un solo livello)
+    if os.path.isdir(os.path.join(folder, 'game', 'saves')):
+        return True
+    # Cerca un solo livello sotto
+    for entry in os.listdir(folder):
+        sub = os.path.join(folder, entry)
+        if os.path.isdir(sub) and os.path.isdir(os.path.join(sub, 'game', 'saves')):
+            return True
+    return False
 
 def is_rpgm_game(folder):
-    return os.path.isdir(os.path.join(folder, 'www', 'save'))
+    # Riconosce sia /www/save che /QUALCOSA/www/save (un solo livello)
+    if os.path.isdir(os.path.join(folder, 'www', 'save')):
+        return True
+    for entry in os.listdir(folder):
+        sub = os.path.join(folder, entry)
+        if os.path.isdir(sub) and os.path.isdir(os.path.join(sub, 'www', 'save')):
+            return True
+    return False
 
 def flatten_folder(folder):
-    # Se la struttura è /game name/gamename/game/saves, rimuovi un livello
-    base = os.path.basename(folder)
-    parent = os.path.dirname(folder)
-    candidate = os.path.join(folder, base)
-    if os.path.isdir(os.path.join(candidate, 'game', 'saves')) or os.path.isdir(os.path.join(candidate, 'www', 'save')):
-        # Sposta tutto su un livello sopra
-        for item in os.listdir(candidate):
-            shutil.move(os.path.join(candidate, item), os.path.join(folder, item))
-        shutil.rmtree(candidate)
-        logging.info(f'Rimossa cartella annidata: {candidate}')
+    # Se la struttura è /NOME_GIOCO/QUALCOSA/game/saves o /NOME_GIOCO/QUALCOSA/www/save, sposta tutto su un livello sopra
+    for entry in os.listdir(folder):
+        candidate = os.path.join(folder, entry)
+        if os.path.isdir(candidate):
+            if os.path.isdir(os.path.join(candidate, 'game', 'saves')) or os.path.isdir(os.path.join(candidate, 'www', 'save')):
+                # Sposta tutto su un livello sopra
+                for item in os.listdir(candidate):
+                    shutil.move(os.path.join(candidate, item), os.path.join(folder, item))
+                shutil.rmtree(candidate)
+                logging.info(f'Rimossa cartella annidata: {candidate}')
+                break
 
 def log_folder_action(folder, action, result, space_saved=None):
     log_file = os.path.join(FOLDER_WATCHED, 'folders_log.csv')
@@ -156,6 +172,7 @@ def clean_game_folder(folder):
         keep = [save_path]
         game_type = 'RPGM'
     else:
+        logging.warning(f"Tipo di gioco non riconosciuto per la cartella: {folder}")
         telegram_force_notify(f'❌ Tipo di gioco non riconosciuto in {folder}')
         log_folder_action(folder, 'clean', 'Tipo di gioco non riconosciuto')
         return
