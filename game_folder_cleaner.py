@@ -165,11 +165,14 @@ def is_folder_already_processed(folder):
 def clean_game_folder(folder):
     if is_renpy_game(folder):
         save_path = os.path.join(folder, 'game', 'saves')
-        keep = [save_path]
+        keep_paths = {save_path}
+        # Mantieni anche la cartella 'game' e la root
+        keep_dirs = {os.path.join(folder, 'game'), folder}
         game_type = 'RenPy'
     elif is_rpgm_game(folder):
         save_path = os.path.join(folder, 'www', 'save')
-        keep = [save_path]
+        keep_paths = {save_path}
+        keep_dirs = {os.path.join(folder, 'www'), folder}
         game_type = 'RPGM'
     else:
         logging.warning(f"Tipo di gioco non riconosciuto per la cartella: {folder}")
@@ -178,17 +181,20 @@ def clean_game_folder(folder):
         return
     # Calcola dimensione prima
     size_before = get_folder_size(folder)
-    # Conta tutti i file e cartelle da eliminare per progress reporting
+    # Elimina tutto tranne la cartella dei salvataggi e la sua gerarchia
     to_delete_dirs = []
     to_delete_files = []
     for root, dirs, files in os.walk(folder):
+        # Elimina cartelle che non sono la root, né 'game'/'www', né 'game/saves'/'www/save'
         for d in dirs:
             full_path = os.path.join(root, d)
-            if full_path not in keep:
+            # Non eliminare la cartella 'game', 'www', 'game/saves', 'www/save', né la root
+            if full_path not in keep_dirs and full_path not in keep_paths:
                 to_delete_dirs.append(full_path)
         for f in files:
             file_path = os.path.join(root, f)
-            if not file_path.startswith(tuple(keep)):
+            # Non eliminare file dentro la cartella dei salvataggi
+            if not file_path.startswith(save_path + os.sep):
                 to_delete_files.append(file_path)
 
     total_dirs = len(to_delete_dirs)
