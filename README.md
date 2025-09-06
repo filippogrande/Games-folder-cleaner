@@ -46,6 +46,100 @@ Game Folder Cleaner è uno script Python che monitora una cartella (locale o NFS
 
 Puoi configurare lo script come servizio systemd per l'avvio automatico. Vedi la documentazione nel codice o chiedi supporto.
 
+## Esempi di strutture supportate
+
+### RenPy Games
+
+**Struttura iniziale supportata:**
+
+```
+GameName/
+├── game/
+│   ├── saves/
+│   │   ├── persistent
+│   │   ├── save1.save
+│   │   └── save2.save
+│   ├── scripts/
+│   ├── images/
+│   └── audio/
+├── lib/
+├── renpy/
+└── GameName.exe
+```
+
+**Struttura con livello aggiuntivo (supportata):**
+
+```
+GameName/
+└── GameName-v1.0/
+    ├── game/
+    │   ├── saves/
+    │   │   ├── persistent
+    │   │   ├── save1.save
+    │   │   └── save2.save
+    │   ├── scripts/
+    │   └── images/
+    ├── lib/
+    └── GameName.exe
+```
+
+**Risultato dopo la pulizia:**
+
+```
+GameName/
+└── game/
+    └── saves/
+        ├── persistent
+        ├── save1.save
+        └── save2.save
+```
+
+### RPGM Games
+
+**Struttura iniziale supportata:**
+
+```
+GameName/
+├── www/
+│   ├── save/
+│   │   ├── config.rpgsave
+│   │   ├── file1.rpgsave
+│   │   └── global.rpgsave
+│   ├── js/
+│   ├── img/
+│   └── audio/
+├── locales/
+├── nw.exe
+└── package.json
+```
+
+**Struttura con livello aggiuntivo (supportata):**
+
+```
+GameName/
+└── GameName-v2.1/
+    ├── www/
+    │   ├── save/
+    │   │   ├── config.rpgsave
+    │   │   ├── file1.rpgsave
+    │   │   └── global.rpgsave
+    │   ├── js/
+    │   └── img/
+    ├── locales/
+    └── nw.exe
+```
+
+**Risultato dopo la pulizia:**
+
+```
+GameName/
+└── www/
+    └── save/
+        ├── config.rpgsave
+        ├── file1.rpgsave
+        └── global.rpgsave
+```
+
 ## Note
 
 - Il file `folders_log.csv` viene salvato nella cartella monitorata.
