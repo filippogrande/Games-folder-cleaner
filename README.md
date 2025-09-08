@@ -140,6 +140,39 @@ GameName/
         └── global.rpgsave
 ```
 
+## Notifiche Telegram
+
+Lo script invia automaticamente diverse tipologie di notifiche Telegram:
+
+### Notifiche di stato generale
+
+- 🚀 **Avvio script**: "Game Folder Cleaner avviato e in ascolto su [percorso]"
+- 🔄 **Inizio scansione**: "Inizio scan cartelle in [percorso]"
+- ✅ **Fine ciclo**: "Fine ciclo pulizia. Cartelle lavorate: X. Totale spazio risparmiato: X MB"
+
+### Notifiche durante il processamento
+
+- 📁 **Cartella in elaborazione**: "Sto per processare la cartella: [nome] (X/Y)"
+- ⏳ **Attesa stabilità**: "Attesa stabilità cartella [nome]: attuale X MB, stabile da X s" (ogni 5 min se necessario)
+- 🔎 **Progresso scansione**: "Scansione in corso in [percorso]... (X/Y)" (ogni 5 min se necessario)
+
+### Notifiche di pulizia
+
+- 🗑️ **Progresso eliminazione**: "Eliminazione cartelle: X/Y in [cartella]" (ogni 5 min durante eliminazioni lunghe)
+- 🗑️ **Progresso file**: "Eliminazione file: X/Y in [cartella]" (ogni 5 min durante eliminazioni lunghe)
+- ✅ **Pulizia completata**: "Pulizia completata per [RenPy/RPGM] in [cartella]. Spazio risparmiato: X MB. Totale: X MB"
+
+### Notifiche di errore
+
+- ❌ **Tipo non riconosciuto**: "Tipo di gioco non riconosciuto in [cartella]"
+- ⚠️ **Errori vari**: Messaggi di errore per problemi di permessi, I/O, ecc.
+
+### Frequenza notifiche
+
+- Le notifiche di **progresso durante operazioni lunghe** vengono inviate ogni 5 minuti per evitare spam
+- Le notifiche **importanti** (avvio, fine, errori) vengono sempre inviate immediatamente
+- Le notifiche **di stato intermedio** seguono la logica di throttling per non sovraccaricare
+
 ## Note
 
 - Il file `folders_log.csv` viene salvato nella cartella monitorata.

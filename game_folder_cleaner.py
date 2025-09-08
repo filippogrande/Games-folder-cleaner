@@ -238,8 +238,13 @@ def clean_game_folder(folder):
     size_after = get_folder_size(folder)
     space_saved = (size_before - size_after) / (1024 * 1024)  # MB
     total_saved = get_total_space_saved() + space_saved
+    
+    # Estrae il nome della cartella del gioco
+    game_name = os.path.basename(folder)
+    
     telegram_force_notify(
-        f'✅ Pulizia completata per {game_type} in {folder}.\n'
+        f'🧹 Pulito gioco {game_name}\n'
+        f'✅ Pulizia completata per {game_type}\n'
         f'Spazio risparmiato in questa cartella: {space_saved:.2f} MB\n'
         f'Totale risparmiato: {total_saved:.2f} MB'
     )
