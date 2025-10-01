@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-folder-cleaner
+  namespace: game-folder-cleaner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: game-folder-cleaner
+  template:
+    metadata:
+      labels:
+        app: game-folder-cleaner
+    spec:
+      containers:
+        - name: cleaner
+          image: game-folder-cleaner:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: cleaner-config
+            - secretRef:
+                name: telegram-secret
+          volumeMounts:
+            - name: games-data
+              mountPath: /data
+      volumes:
+        - name: games-data
+          # Per k3s su host singolo user hostPath è ok
+          hostPath:
+            path: /mnt/games
+            type: Directory

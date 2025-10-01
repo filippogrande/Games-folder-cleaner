@@ -182,3 +182,63 @@ Lo script invia automaticamente diverse tipologie di notifiche Telegram:
 ## Licenza
 
 MIT
+
+## Docker & k3s
+
+Questa sezione mostra come containerizzare lo script e distribuirlo in un cluster k3s (o qualsiasi cluster Kubernetes con accesso al nodo host).
+
+- Image name suggerita: `game-folder-cleaner:latest` (puoi usare il tuo registry se vuoi pushare)
+
+1. Build dell'immagine Docker (locale):
+
+```sh
+docker build -t game-folder-cleaner:latest .
+```
+
+2. Testare localmente montando una cartella host (esempio `/mnt/games/test`):
+
+```sh
+docker run --rm -v /mnt/games/test:/data \
+    -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_CHAT_ID=... \
+    game-folder-cleaner:latest --once
+```
+
+3. Deploy in k3s (manifests in `k8s/`):
+
+Assicurati che la tua immagine sia disponibile al nodo k3s. Per test su singolo nodo puoi buildare l'immagine sul nodo oppure usare `kind`/`k3d` with local registry.
+
+Applica i manifest:
+
+```sh
+kubectl apply -f k8s/namespace.yaml
+# Imposta i segreti telegram (meglio usare kubectl create secret --from-literal=...)
+kubectl create secret generic telegram-secret -n game-folder-cleaner \
+    --from-literal=TELEGRAM_BOT_TOKEN="<token>" \
+    --from-literal=TELEGRAM_CHAT_ID="<chat_id>"
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/deployment.yaml
+```
+
+Note sul volume:
+
+- Il `deployment.yaml` usa un `hostPath` che monta `/mnt/games` del nodo su `/data` del container. Assicurati di avere i permessi e che il percorso esista.
+- In produzione preferisci un PVC (PersistentVolume) se il tuo cluster offre un provisioner; ho lasciato `hostPath` per semplicità in k3s single-node.
+
+Esporre variabili di configurazione:
+
+- `CHECK_INTERVAL` è fornito dal `ConfigMap`.
+- `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID` sono forniti dal secret.
+- Se vuoi sovrascrivere la cartella monitorata, puoi su Deployment impostare `env` o passare un diverso mountPath.
+
+Debug e test:
+
+- Per eseguire una singola scansione dal pod (utile per debug):
+  - `kubectl exec -n game-folder-cleaner -it <pod-name> -- python game_folder_cleaner.py --once --debug`
+
+Pulizia:
+
+- Per rimuovere tutto creato dai manifest:
+  - `kubectl delete -f k8s/deployment.yaml -n game-folder-cleaner`
+  - `kubectl delete -f k8s/configmap.yaml -n game-folder-cleaner`
+  - `kubectl delete secret telegram-secret -n game-folder-cleaner`
+  - `kubectl delete -f k8s/namespace.yaml`
