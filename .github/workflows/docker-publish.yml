@@ -43,4 +43,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Image digest
-        run: echo "Docker image pushed: filippogrande/game-folder-cleaner:latest"
+        run: echo "Docker image pushed filippogrande/game-folder-cleaner:latest"
