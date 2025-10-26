@@ -236,5 +236,4 @@ metadata:
   namespace: game-folder-cleaner
 data:
   EXTRA_FLAGS: "--debug"
-
 # Fine del file

@@ -4,7 +4,7 @@ metadata:
   name: game-folder-cleaner-cronjob
   namespace: game-folder-cleaner
 spec:
-  schedule: "0 2 * * *"  # Ogni giorno alle 2:00 AM
+  schedule: "0 2 * * *" # Ogni giorno alle 2:00 AM
   jobTemplate:
     spec:
       template:
