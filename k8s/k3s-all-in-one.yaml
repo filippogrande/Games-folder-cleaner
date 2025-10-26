@@ -1,0 +1,240 @@
+# k3s all-in-one manifest per Game Folder Cleaner
+# Contiene tutti i manifest necessari per eseguire l'app su un singolo nodo k3s.
+# Prima di applicarlo sul server, PERSONALIZZA i seguenti campi:
+# - hostPath.path (attualmente /mnt/games) -> sostituire con la cartella giochi del server
+# - telegram-secret (BASE64) se vuoi notifiche Telegram
+# - schedule del CronJob se vuoi cambiare orario
+# - eventualmente cambiare risorse/requests/limits
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: game-folder-cleaner
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cleaner-config
+  namespace: game-folder-cleaner
+data:
+  # Modalità container: lo script in container esegue una run singola e poi esce se CONTAINER_MODE=true
+  CONTAINER_MODE: "true"
+  # Cartella monitorata dentro il container
+  FOLDER_WATCHED: "/data"
+  # Giorni/secondi tra controlli internamente (non rilevante per run singola)
+  CHECK_INTERVAL: "3600"
+  LOG_LEVEL: "INFO"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: telegram-secret
+  namespace: game-folder-cleaner
+type: Opaque
+stringData:
+  # Aggiungi qui i valori plain-text; verranno creati nel cluster come base64 automaticamente
+  TELEGRAM_BOT_TOKEN: ""
+  TELEGRAM_CHAT_ID: ""
+
+---
+# ServiceAccount + Role/RoleBinding per accessi limitati (opzionale, utile se vuoi loggare su k8s o usare API)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cleaner-sa
+  namespace: game-folder-cleaner
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cleaner-role
+  namespace: game-folder-cleaner
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cleaner-rb
+  namespace: game-folder-cleaner
+subjects:
+  - kind: ServiceAccount
+    name: cleaner-sa
+    namespace: game-folder-cleaner
+roleRef:
+  kind: Role
+  name: cleaner-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# CronJob - esegue una run giornaliera alle 2:00 AM
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: game-folder-cleaner-cronjob
+  namespace: game-folder-cleaner
+spec:
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: cleaner-sa
+          restartPolicy: OnFailure
+          containers:
+            - name: cleaner
+              image: filippogrande/game-folder-cleaner:latest
+              imagePullPolicy: Always
+              envFrom:
+                - configMapRef:
+                    name: cleaner-config
+                - secretRef:
+                    name: telegram-secret
+              volumeMounts:
+                - name: games-data
+                  mountPath: /data
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+          volumes:
+            - name: games-data
+              hostPath:
+                path: /mnt/games # <-- MODIFICA questa riga con la cartella giochi sul server
+                type: Directory
+
+---
+# Job per esecuzione singola (utile per test-in-place)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: game-folder-cleaner-manual-job
+  namespace: game-folder-cleaner
+spec:
+  template:
+    spec:
+      serviceAccountName: cleaner-sa
+      restartPolicy: Never
+      containers:
+        - name: cleaner
+          image: filippogrande/game-folder-cleaner:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: cleaner-config
+            - secretRef:
+                name: telegram-secret
+          volumeMounts:
+            - name: games-data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: games-data
+          hostPath:
+            path: /mnt/games # <-- MODIFICA questa riga con la cartella giochi sul server
+            type: Directory
+
+---
+# Deployment (opzionale) - replica 0 di default, alza se vuoi un pod sempre in ascolto
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-folder-cleaner-deployment
+  namespace: game-folder-cleaner
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: game-folder-cleaner
+  template:
+    metadata:
+      labels:
+        app: game-folder-cleaner
+    spec:
+      serviceAccountName: cleaner-sa
+      containers:
+        - name: cleaner
+          image: filippogrande/game-folder-cleaner:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: cleaner-config
+            - secretRef:
+                name: telegram-secret
+          volumeMounts:
+            - name: games-data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: games-data
+          hostPath:
+            path: /mnt/games # <-- MODIFICA questa riga con la cartella giochi sul server
+            type: Directory
+
+---
+# Optional: PersistentVolume + PersistentVolumeClaim example (se vuoi usare PVC invece di hostPath)
+# ATTENZIONE: Su k3s a singolo nodo puoi creare un PV con hostPath; in cluster multipli usa NFS/Longhorn/StorageClass
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: games-pv
+  namespace: game-folder-cleaner
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: /mnt/games
+    type: Directory
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: games-pvc
+  namespace: game-folder-cleaner
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  volumeName: games-pv
+
+---
+# ConfigMap per eventuali script/flags aggiuntivi (estendibile)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cleaner-extra
+  namespace: game-folder-cleaner
+data:
+  EXTRA_FLAGS: "--debug"
+
+# Fine del file

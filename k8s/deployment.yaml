@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: cleaner
-          image: game-folder-cleaner:latest
-          imagePullPolicy: IfNotPresent
+          image: filippogrande/game-folder-cleaner:latest
+          imagePullPolicy: Always
           envFrom:
             - configMapRef:
                 name: cleaner-config
