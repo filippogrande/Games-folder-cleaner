@@ -6,14 +6,6 @@ on:
       - main
 
 jobs:
-name: Build and Push Docker image to Docker Hub
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
@@ -43,4 +35,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Image digest
-        run: echo "Docker image pushed filippogrande/game-folder-cleaner:latest"
+        run: echo "Docker image pushed: filippogrande/game-folder-cleaner:latest"
