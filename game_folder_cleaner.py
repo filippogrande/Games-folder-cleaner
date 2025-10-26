@@ -7,6 +7,9 @@ import csv
 import argparse
 from datetime import datetime
 from dotenv import load_dotenv
+import base64
+import binascii
+import re
 
 # Carica .env se presente
 load_dotenv()
@@ -18,9 +21,49 @@ TELEGRAM_NOTIFICATION_INTERVAL = 300  # 5 minuti
 # Defaults pensati per esecuzione in container/k3s
 DEFAULT_FOLDER_WATCHED = '/data'
 FOLDER_WATCHED = os.getenv('FOLDER_WATCHED', DEFAULT_FOLDER_WATCHED)
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
+# Legge variabili raw dall'ambiente (possono essere in chiaro o base64)
+_raw_telegram_bot = os.getenv('TELEGRAM_BOT_TOKEN')
+_raw_telegram_chat = os.getenv('TELEGRAM_CHAT_ID')
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '86400'))  # default 24h
+
+
+def _looks_like_base64(s: str) -> bool:
+    """Rileva se una stringa *probabilmente* è in Base64.
+    Usa un controllo di pattern e poi tenta il decoding con validate=True.
+    Questo evita di decodificare stringhe normali che contengono caratteri base64.
+    """
+    if not s or not isinstance(s, str):
+        return False
+    s_stripped = s.strip()
+    # Base64 usa A-Z a-z 0-9 +/ e fino a due '=' di padding
+    if not re.fullmatch(r'[A-Za-z0-9+/]+={0,2}', s_stripped):
+        return False
+    # Tentativo di decodifica valido
+    try:
+        base64.b64decode(s_stripped, validate=True)
+        return True
+    except (binascii.Error, ValueError):
+        return False
+
+
+def _maybe_decode_base64(s: str) -> str:
+    """Decodifica la stringa se sembra Base64, altrimenti la ritorna invariata.
+    Se la decodifica fallisce, restituisce l'originale.
+    """
+    if not s or not isinstance(s, str):
+        return s
+    if _looks_like_base64(s):
+        try:
+            return base64.b64decode(s.strip()).decode('utf-8')
+        except Exception:
+            return s
+    return s
+
+
+# Applica la decodifica automatica se necessario
+TELEGRAM_BOT_TOKEN = _maybe_decode_base64(_raw_telegram_bot) if _raw_telegram_bot else None
+TELEGRAM_CHAT_ID = _maybe_decode_base64(_raw_telegram_chat) if _raw_telegram_chat else None
 
 # Determina se Telegram è configurato
 TELEGRAM_ENABLED = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
