@@ -179,6 +179,49 @@ def flatten_folder(folder):
         logging.warning(f'Errore in flatten_folder per {folder}: {e}')
 
 
+def set_permissions(folder):
+    """Cerca di impostare ownership (uid/gid corrente) e chmod 777 ricorsivamente su folder.
+    Se fallisce invia una notifica Telegram e ritorna False; altrimenti True.
+    """
+    try:
+        try:
+            uid = os.getuid()
+            gid = os.getgid()
+        except AttributeError:
+            # In ambienti senza getuid (molto raro), fallback a root
+            uid = 0
+            gid = 0
+        for root, dirs, files in os.walk(folder):
+            # tenta su directory
+            try:
+                os.chown(root, uid, gid)
+            except Exception:
+                pass
+            try:
+                os.chmod(root, 0o777)
+            except Exception:
+                pass
+            # e su file
+            for f in files:
+                fp = os.path.join(root, f)
+                try:
+                    os.chown(fp, uid, gid)
+                except Exception:
+                    pass
+                try:
+                    os.chmod(fp, 0o777)
+                except Exception:
+                    pass
+        return True
+    except Exception as e:
+        logging.error(f'Errore impostazione permessi per {folder}: {e}')
+        try:
+            telegram_force_notify(f'❌ Fallita impostazione permessi per {folder}: {e}')
+        except Exception:
+            logging.debug('Invio notifica Telegram fallito durante set_permissions')
+        return False
+
+
 def log_folder_action(folder, action, result, space_saved=None):
     try:
         os.makedirs(FOLDER_WATCHED, exist_ok=True)
@@ -269,9 +312,13 @@ def clean_game_folder(folder):
             return
         # Calcola dimensione prima
         size_before = get_folder_size(folder)
+        # nome gioco per messaggi
+        game_name = os.path.basename(folder)
         # Elimina tutto tranne la cartella dei salvataggi e la sua gerarchia
         to_delete_dirs = []
         to_delete_files = []
+        permission_errors = False
+        failed_paths = []
         for root, dirs, files in os.walk(folder):
             # Elimina cartelle che non sono la root, né 'game'/'www', né 'game/saves'/'www/save'
             for d in dirs:
@@ -298,6 +345,10 @@ def clean_game_folder(folder):
                 logging.info(f'Eliminata cartella: {d} ({idx}/{total_dirs})')
             except Exception as e:
                 logging.error(f'Errore eliminazione {d}: {e}')
+                # Se è un errore di permessi, segnalo e salvo il path
+                if isinstance(e, PermissionError) or getattr(e, 'errno', None) == 13:
+                    permission_errors = True
+                    failed_paths.append(d)
             now = time.time()
             if now - last_log >= 30:
                 logging.info(f"[clean_game_folder] Eliminazione cartelle: {idx}/{total_dirs} in {folder}")
@@ -315,6 +366,9 @@ def clean_game_folder(folder):
                 logging.info(f'Eliminato file: {fpath} ({idx}/{total_files})')
             except Exception as e:
                 logging.error(f'Errore eliminazione {fpath}: {e}')
+                if isinstance(e, PermissionError) or getattr(e, 'errno', None) == 13:
+                    permission_errors = True
+                    failed_paths.append(fpath)
             now = time.time()
             if now - last_log >= 30:
                 logging.info(f"[clean_game_folder] Eliminazione file: {idx}/{total_files} in {folder}")
@@ -322,13 +376,17 @@ def clean_game_folder(folder):
             if now - last_tg >= 300:
                 telegram_notify_guarded(f'🗑️ Eliminazione file: {idx}/{total_files} in {folder}')
                 last_tg = now
+        # Se ci sono errori di permessi, notifica e non segnare la cartella come pulita
+        if permission_errors:
+            sample = failed_paths[:3]
+            telegram_force_notify(f'❌ Impossibile completare pulizia di {game_name}: permessi insufficienti su {len(failed_paths)} oggetti. Esempi: {sample}')
+            log_folder_action(folder, 'clean', f'Fallita per permessi in {game_type}', None)
+            return
+
         # Calcola dimensione dopo
         size_after = get_folder_size(folder)
         space_saved = (size_before - size_after) / (1024 * 1024)  # MB
         total_saved = get_total_space_saved() + space_saved
-
-        # Estrae il nome della cartella del gioco
-        game_name = os.path.basename(folder)
 
         telegram_force_notify(
             f'🧹 Pulito gioco {game_name}\n'
@@ -354,6 +412,12 @@ def scan_and_process_folders():
             logging.info(f"Nuova cartella trovata: {folder}")
             telegram_notify_guarded(f'📁 Sto per processare la cartella: {folder} ({idx+1}/{len(entries)})')
             wait_for_stable_folder(folder)
+            # Prova a impostare ownership/permessi prima di partire
+            perms_ok = set_permissions(folder)
+            if not perms_ok:
+                logging.warning(f"Saltata cartella per fallimento impostazione permessi: {folder}")
+                # set_permissions invia già una notifica Telegram in caso di errore
+                continue
             flatten_folder(folder)
             clean_game_folder(folder)
             nuove_cartelle.append(folder)
