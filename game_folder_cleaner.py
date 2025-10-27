@@ -22,6 +22,9 @@ TELEGRAM_NOTIFICATION_INTERVAL = 300  # 5 minuti
 DEFAULT_FOLDER_WATCHED = '/data'
 FOLDER_WATCHED = os.getenv('FOLDER_WATCHED', DEFAULT_FOLDER_WATCHED)
 
+# Versione dell'app (configurabile via env APP_VERSION)
+APP_VERSION = os.getenv('APP_VERSION', '1.0.1')
+
 # Legge variabili raw dall'ambiente (possono essere in chiaro o base64)
 _raw_telegram_bot = os.getenv('TELEGRAM_BOT_TOKEN')
 _raw_telegram_chat = os.getenv('TELEGRAM_CHAT_ID')
@@ -183,6 +186,8 @@ def set_permissions(folder):
     """Cerca di impostare ownership (uid/gid corrente) e chmod 777 ricorsivamente su folder.
     Se fallisce invia una notifica Telegram e ritorna False; altrimenti True.
     """
+    failed = []
+    modified_count = 0
     try:
         try:
             uid = os.getuid()
@@ -191,34 +196,61 @@ def set_permissions(folder):
             # In ambienti senza getuid (molto raro), fallback a root
             uid = 0
             gid = 0
+
         for root, dirs, files in os.walk(folder):
-            # tenta su directory
+            # directory
             try:
                 os.chown(root, uid, gid)
-            except Exception:
-                pass
+                modified_count += 1
+            except Exception as e:
+                failed.append(root)
             try:
                 os.chmod(root, 0o777)
+                modified_count += 1
             except Exception:
-                pass
-            # e su file
+                failed.append(root)
+            # files
             for f in files:
                 fp = os.path.join(root, f)
                 try:
                     os.chown(fp, uid, gid)
+                    modified_count += 1
                 except Exception:
-                    pass
+                    failed.append(fp)
                 try:
                     os.chmod(fp, 0o777)
+                    modified_count += 1
                 except Exception:
-                    pass
+                    failed.append(fp)
+
+        # Rimuovo duplicati e mantengo ordine
+        failed = list(dict.fromkeys(failed))
+
+        if failed:
+            # manda notifica di fallimento con alcuni esempi
+            sample = failed[:5]
+            msg = f'❌ Fallita impostazione permessi per {os.path.basename(folder)}: permessi mancanti su {len(failed)} oggetti. Esempi: {sample}'
+            logging.error(msg)
+            try:
+                telegram_force_notify(msg)
+            except Exception:
+                logging.debug('Invio notifica Telegram fallito durante set_permissions (fail)')
+            return False
+
+        # tutto ok
+        msg = f'✅ Permessi impostati correttamente per {os.path.basename(folder)}: {modified_count} operazioni effettuate'
+        logging.info(msg)
+        try:
+            telegram_force_notify(msg)
+        except Exception:
+            logging.debug('Invio notifica Telegram fallito durante set_permissions (success)')
         return True
     except Exception as e:
-        logging.error(f'Errore impostazione permessi per {folder}: {e}')
+        logging.error(f'Errore critico impostazione permessi per {folder}: {e}')
         try:
             telegram_force_notify(f'❌ Fallita impostazione permessi per {folder}: {e}')
         except Exception:
-            logging.debug('Invio notifica Telegram fallito durante set_permissions')
+            logging.debug('Invio notifica Telegram fallito durante set_permissions (except)')
         return False
 
 
@@ -453,8 +485,8 @@ def main():
     # Se in container, esegui una sola scansione di default (comportamento CronJob)
     run_once = args.once or os.getenv('CONTAINER_MODE', '').lower() == 'true'
 
-    logging.info(f'In ascolto su {FOLDER_WATCHED}...')
-    telegram_force_notify(f'🚀 Game Folder Cleaner avviato e in ascolto su {FOLDER_WATCHED}')
+    logging.info(f'In ascolto su {FOLDER_WATCHED}... (v{APP_VERSION})')
+    telegram_force_notify(f'🚀 Game Folder Cleaner v{APP_VERSION} avviato e in ascolto su {FOLDER_WATCHED}')
 
     try:
         if run_once:
