@@ -270,6 +270,11 @@ def log_folder_action(folder, action, result, space_saved=None):
                 result,
                 f"{space_saved:.2f}" if space_saved is not None else ''
             ])
+        # Imposta permessi 777 dopo ogni scrittura
+        try:
+            os.chmod(log_file, 0o777)
+        except Exception as e:
+            logging.warning(f'Impossibile impostare permessi 777 su {log_file}: {e}')
     except Exception as e:
         logging.error(f'Impossibile scrivere log azione per {folder}: {e}')
 
@@ -461,6 +466,19 @@ def scan_and_process_folders():
         f'✅ Fine ciclo pulizia. Cartelle lavorate: {len(nuove_cartelle)}\n'
         f'Totale spazio risparmiato: {total_saved:.2f} MB'
     )
+
+    # Dopo la fine ciclo, elenca giochi non riconosciuti
+    try:
+        log_file = os.path.join(FOLDER_WATCHED, 'folders_log.csv')
+        if os.path.isfile(log_file):
+            with open(log_file, 'r', newline='') as csvfile:
+                reader = csv.DictReader(csvfile)
+                non_riconosciuti = [row['folder'] for row in reader if row.get('result') == 'Tipo di gioco non riconosciuto']
+            if non_riconosciuti:
+                msg = '⚠️ Giochi non riconosciuti da risolvere manualmente:\n' + '\n'.join(non_riconosciuti)
+                telegram_force_notify(msg)
+    except Exception as e:
+        logging.error(f'Errore controllo giochi non riconosciuti: {e}')
 
 
 def parse_args():
