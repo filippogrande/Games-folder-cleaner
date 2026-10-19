@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Crea un utente non-root
 RUN useradd -m appuser || true
