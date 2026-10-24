@@ -1,7 +1,7 @@
 # Game Folder Cleaner
 
 Script Python che monitora una cartella (locale o NFS) e pulisce le sottocartelle di
- giochi Ren'Py e RPG Maker, tenendo solo i salvataggi. Invia notifiche Telegram e
+giochi Ren'Py e RPG Maker, tenendo solo i salvataggi. Invia notifiche Telegram e
 tiene un CSV delle cartelle lavorate.
 
 ## Avvio rapido
